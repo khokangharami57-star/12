@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>স্নেক গেম</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --text:#f1f5f9; --accent:#22c55e; --food:#ef4444; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,"Noto Sans Bengali",sans-serif; touch-action:none; user-select:none; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:10px; }
+  h1 { margin:0; font-size:22px; }
+  .bar { display:flex; gap:16px; font-size:16px; }
+  .bar b { color:var(--accent); }
+  #wrap { position:relative; }
+  canvas { background:var(--card); border-radius:12px; border:2px solid #334155; max-width:100%; display:block; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:10px; background:rgba(15,23,42,.85); border-radius:12px; text-align:center; padding:10px; }
+  button { background:var(--accent); color:#052e16; border:0; border-radius:12px; font-size:18px;
+    font-weight:700; padding:10px 24px; }
+  .pad { display:grid; grid-template-columns:repeat(3,64px); grid-template-rows:repeat(2,56px); gap:8px; }
+  .pad button { padding:0; background:#334155; color:var(--text); font-size:24px; }
+  .pad .up { grid-column:2; } .pad .l { grid-row:2; grid-column:1; }
+  .pad .d { grid-row:2; grid-column:2; } .pad .r { grid-row:2; grid-column:3; }
+</style>
+</head>
+<body>
+<h1>🐍 স্নেক গেম</h1>
+<div class="bar">
+  <div>স্কোর: <b id="score">0</b></div>
+  <div>সেরা: <b id="best">0</b></div>
+</div>
+<div id="wrap">
+  <canvas id="c" width="320" height="320"></canvas>
+  <div id="overlay">
+    <div id="msg" style="font-size:20px">সোয়াইপ বা বাটন দিয়ে সাপ চালাও।<br>খাবার খাও, দেয়াল ও নিজের শরীর এড়িয়ে চলো!</div>
+    <button id="start">খেলা শুরু</button>
+  </div>
+</div>
+<div class="pad">
+  <button class="up" data-d="U">▲</button>
+  <button class="l" data-d="L">◀</button>
+  <button class="d" data-d="D">▼</button>
+  <button class="r" data-d="R">▶</button>
+</div>
+
+<script>
+(function(){
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const N = 16, S = cv.width / N;
+  const scoreEl = document.getElementById('score'), bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay'), msg = document.getElementById('msg');
+  let snake, dir, next, food, score, timer, speed, running = false;
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('snakeBest')) || 0; } catch(e) {}
+  bestEl.textContent = best;
+
+  const V = { U:[0,-1], D:[0,1], L:[-1,0], R:[1,0] };
+
+  function placeFood(){
+    do { food = [Math.floor(Math.random()*N), Math.floor(Math.random()*N)]; }
+    while (snake.some(s => s[0]===food[0] && s[1]===food[1]));
+  }
+
+  function reset(){
+    snake = [[8,8],[7,8],[6,8]];
+    dir = 'R'; next = 'R'; score = 0; speed = 150;
+    scoreEl.textContent = 0;
+    placeFood();
+  }
+
+  function setDir(d){
+    const o = {U:'D', D:'U', L:'R', R:'L'};
+    if (o[d] !== dir) next = d;
+  }
+
+  function step(){
+    dir = next;
+    const h = [snake[0][0] + V[dir][0], snake[0][1] + V[dir][1]];
+    if (h[0]<0 || h[1]<0 || h[0]>=N || h[1]>=N || snake.some(s => s[0]===h[0] && s[1]===h[1])) return gameOver();
+    snake.unshift(h);
+    if (h[0]===food[0] && h[1]===food[1]) {
+      score++; scoreEl.textContent = score;
+      if (speed > 70) speed -= 4;
+      placeFood();
+      clearInterval(timer); timer = setInterval(step, speed);
+      beep(660, .06);
+    } else snake.pop();
+    draw();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(food[0]*S+S/2, food[1]*S+S/2, S/2-2, 0, 7);
+    ctx.fill();
+    snake.forEach((s,i) => {
+      ctx.fillStyle = i===0 ? '#4ade80' : '#22c55e';
+      ctx.fillRect(s[0]*S+1, s[1]*S+1, S-2, S-2);
+    });
+  }
+
+  function gameOver(){
+    clearInterval(timer); running = false;
+    beep(180, .3);
+    if (score > best) {
+      best = score; bestEl.textContent = best;
+      try { localStorage.setItem('snakeBest', best); } catch(e) {}
+    }
+    msg.innerHTML = 'গেম ওভার! 💀<br>তোমার স্কোর: ' + score;
+    document.getElementById('start').textContent = 'আবার খেলো';
+    overlay.style.display = 'flex';
+  }
+
+  function start(){
+    reset(); draw();
+    overlay.style.display = 'none';
+    running = true;
+    clearInterval(timer); timer = setInterval(step, speed);
+  }
+
+  let actx;
+  function beep(f, t){
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = f; g.gain.value = .08;
+      o.connect(g); g.connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + t);
+    } catch(e) {}
+  }
+
+  document.getElementById('start').onclick = start;
+  document.querySelectorAll('.pad button').forEach(b =>
+    b.addEventListener('touchstart', e => { e.preventDefault(); setDir(b.dataset.d); }, {passive:false}));
+  document.querySelectorAll('.pad button').forEach(b =>
+    b.addEventListener('click', () => setDir(b.dataset.d)));
+
+  window.addEventListener('keydown', e => {
+    const m = {ArrowUp:'U', ArrowDown:'D', ArrowLeft:'L', ArrowRight:'R', w:'U', s:'D', a:'L', d:'R'};
+    if (m[e.key]) { e.preventDefault(); setDir(m[e.key]); }
+  });
+
+  let sx, sy;
+  document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, {passive:true});
+  document.addEventListener('touchend', e => {
+    if (sx == null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) > 25)
+      setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'));
+    sx = null;
+  }, {passive:true});
+
+  reset(); draw();
+})();
+</script>
+</body>
+</html>
